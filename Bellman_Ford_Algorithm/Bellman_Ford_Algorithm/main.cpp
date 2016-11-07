@@ -84,7 +84,7 @@ compute(int32 (&edges)[rows][cols], int32 start, int32 shortestPath[], int32 par
     
     shortestPath[start] = 0;
     
-    for (int32 iteration = 0; iteration < size - 1; ++iteration)
+    for (int32 iteration = 0; iteration < cols - 1; ++iteration)
     {
         for (int32 to = 0; to < cols; ++to)
         {
@@ -157,15 +157,15 @@ int main(int argc, const char * argv[]) {
     
     int32 start = 0;
     
-    //int32 noNegativeRoutes = compute(edges, start, distance, parent, size);
-    int32 noNegativeRoutes = compute(adjacency_matrix, start, distance, parent, size);
+//    int32 noNegativeRoutes = compute(edges, start, distance, parent, size);
+    int32 noNegativeRoutes = compute(adjacency_matrix, start, distance, parent, 6);
     
     std::cout << "Bellman Ford returned " << noNegativeRoutes << "\n";
     if (noNegativeRoutes == 1)
     {
-        for (int32 i = 1; i < 6; ++i)
+        for (int32 i = 0; i < 6; ++i)
         {
-            std::cout << "Distance to " << i << " from " << parent[i] << " is " << distance[i] << "\n";
+            std::cout << "Distance to " << i << " is " << distance[i] << "\n";
             
         }
     }
