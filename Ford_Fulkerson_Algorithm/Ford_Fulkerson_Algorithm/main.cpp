@@ -264,11 +264,17 @@ int main(int argc, const char * argv[]) {
     int32 sink = 5;
     assert(start != sink);
 
+    clock_t begin = clock();
     int32 flow_graph = compute(graph, start, sink);
-    std::cout << "Ford Fuklerson - graph: max computed flow " << flow_graph << "\n";
+    clock_t end = clock();
+    double elapsed_clocks = double(end - begin);
+    std::cout << "Ford Fuklerson - graph: max computed flow " << flow_graph << " in " << elapsed_clocks << " clocks \n";
     
+    clock_t begin_edges = clock();
     int32 flow_edges = compute(edges, start, sink, 6);
-    std::cout << "Ford Fuklerson - edges: max computed flow " << flow_edges << "\n";
+    clock_t end_edges = clock();
+    double elapsed_clocks_edges = double(end_edges - begin_edges);
+    std::cout << "Ford Fuklerson - edges: max computed flow " << flow_edges << " in " << elapsed_clocks_edges << " clocks \n";
     
     assert(flow_edges == flow_graph);
     
