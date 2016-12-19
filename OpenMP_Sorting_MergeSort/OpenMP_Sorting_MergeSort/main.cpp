@@ -30,7 +30,7 @@ typedef float real32;
 typedef double real64;
 
 global_variable int32 number_of_threads = 0;
-global_variable int32 size_of_array = 2000000;
+global_variable int32 size_of_array = 1000000;
 
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
 
@@ -94,9 +94,9 @@ mergeSort(type *array, int32 size) {
 
 // ****************** PARALLEL ***************************
 
-void insertion_sort(int arr[], int n)
+void insertion_sort(int32 arr[], int32 n)
 {
-    int i, key, j;
+    int32 i, key, j;
     for (i = 1; i < n; i++)
     {
         key = arr[i];
@@ -105,7 +105,7 @@ void insertion_sort(int arr[], int n)
         while (j >= 0 && arr[j] > key)
         {
             arr[j+1] = arr[j];
-            j = j-1;
+            j--;
         }
         arr[j+1] = key;
     }
@@ -113,14 +113,17 @@ void insertion_sort(int arr[], int n)
 
 internal void
 serial_mergeSort(int32 *array, int32 firstEl, int32 lastEl) {
-    int32 midEl = (firstEl + lastEl) / 2;
-    if (lastEl - firstEl <= 32) {
-        insertion_sort(array, lastEl - firstEl);
-        return;
+    if (lastEl - firstEl >= 2) {
+        int32 midEl = (firstEl + lastEl) / 2;
+        
+        if (lastEl - firstEl <= 4) {
+            insertion_sort(array + firstEl, lastEl - firstEl);
+            return;
+        }
+        serial_mergeSort(array, firstEl, midEl);
+        serial_mergeSort(array, midEl, lastEl);
+        merge(array, firstEl, midEl, lastEl);
     }
-    mergeSort(array, firstEl, midEl);
-    mergeSort(array, midEl, lastEl);
-    merge(array, firstEl, midEl, lastEl);
 }
 
 template<typename type>
@@ -129,15 +132,15 @@ mergeSortParallel(type *array, int32 firstEl, int32 lastEl) {
     if (lastEl - firstEl >= 2) {
         int32 midEl = (firstEl + lastEl) / 2;
         
-        if ( lastEl - firstEl < 1000) {
+        if ( lastEl - firstEl < 1024) {
             // do not spawn new threads
             serial_mergeSort(array, firstEl, lastEl);
 
         } else {
 
-#pragma omp task// firstprivate(firstEl, midEl, freeThreads)
+#pragma omp task firstprivate(firstEl, midEl)
             {mergeSortParallel(array, firstEl, midEl);}
-#pragma omp task// firstprivate(lastEl, midEl, freeThreads)
+#pragma omp task firstprivate(lastEl, midEl)
             {mergeSortParallel(array, midEl, lastEl);}
 #pragma omp taskwait
             merge(array, firstEl, midEl, lastEl);
@@ -149,8 +152,8 @@ mergeSortParallel(type *array, int32 firstEl, int32 lastEl) {
 template<typename type>
 internal void
 mergeSortParallel(type *array, int32 size) {
-#pragma omp parallel
-#pragma omp single nowait
+#pragma omp parallel num_threads(number_of_threads)
+#pragma omp master
     mergeSortParallel(array, 0, size);
 }
 
@@ -256,7 +259,7 @@ init() {
 int main(int argc, const char * argv[]) {
     init();
     
-    std::cout << "Generating random "<< size_of_array << " numbers...\n";
+    std::cout << "Generating random " << size_of_array << " numbers...\n";
     int32 *array_to_sort = new int32[size_of_array];
     for (int i = 0; i < size_of_array; i++) {
         array_to_sort[i] = rand() % 100;
