@@ -30,38 +30,17 @@ typedef float real32;
 typedef double real64;
 
 global_variable int32 number_of_threads = 0;
-global_variable int32 size_of_array = 1000000;
+global_variable int32 size_of_array = 2000000;
 
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
 
 // ****************** ALGORITHM ***************************
 
-// ****************** PARALLEL ***************************
-
-template<typename type>
-internal void
-mergeSortParallel(type array[], int32 firstEl, int32 lastEl) {
-    if (lastEl - firstEl >= 2) {
-        int32 midEl = (firstEl + lastEl) / 2;
-        
-        mergeSort(array, firstEl, midEl);
-        mergeSort(array, midEl, lastEl);
-        
-        merge(array, firstEl, midEl, lastEl);
-    }
-}
-
-template<typename type>
-internal void
-mergeSortParallel(type array[], int32 size) {
-    mergeSortParalell(array, 0, size);
-}
-
 // ****************** ONE THREAD ***************************
 
 template<typename type>
 internal void
-merge(type array[], int32 firstEl, int32 midEl, int32 lastEl) {
+merge(type *array, int32 firstEl, int32 midEl, int32 lastEl) {
     //    std::cout << firstEl << " " << midEl << " " << lastEl << std::endl;
     type *localArray = new type[lastEl - firstEl]();
     int32 index = 0;
@@ -96,7 +75,7 @@ merge(type array[], int32 firstEl, int32 midEl, int32 lastEl) {
 
 template<typename type>
 internal void
-mergeSort(type array[], int32 firstEl, int32 lastEl) {
+mergeSort(type *array, int32 firstEl, int32 lastEl) {
     if (lastEl - firstEl >= 2) {
         int32 midEl = (firstEl + lastEl) / 2;
         
@@ -109,11 +88,118 @@ mergeSort(type array[], int32 firstEl, int32 lastEl) {
 
 template<typename type>
 internal void
-mergeSort(type array[], int32 size) {
+mergeSort(type *array, int32 size) {
     mergeSort(array, 0, size);
 }
 
-// ****************** UTILS ***************************
+// ****************** PARALLEL ***************************
+
+void insertion_sort(int arr[], int n)
+{
+    int i, key, j;
+    for (i = 1; i < n; i++)
+    {
+        key = arr[i];
+        j = i-1;
+    
+        while (j >= 0 && arr[j] > key)
+        {
+            arr[j+1] = arr[j];
+            j = j-1;
+        }
+        arr[j+1] = key;
+    }
+}
+
+internal void
+serial_mergeSort(int32 *array, int32 firstEl, int32 lastEl) {
+    int32 midEl = (firstEl + lastEl) / 2;
+    if (lastEl - firstEl <= 32) {
+        insertion_sort(array, lastEl - firstEl);
+        return;
+    }
+    mergeSort(array, firstEl, midEl);
+    mergeSort(array, midEl, lastEl);
+    merge(array, firstEl, midEl, lastEl);
+}
+
+template<typename type>
+internal void
+mergeSortParallel(type *array, int32 firstEl, int32 lastEl) {
+    if (lastEl - firstEl >= 2) {
+        int32 midEl = (firstEl + lastEl) / 2;
+        
+        if ( lastEl - firstEl < 1000) {
+            // do not spawn new threads
+            serial_mergeSort(array, firstEl, lastEl);
+
+        } else {
+
+#pragma omp task// firstprivate(firstEl, midEl, freeThreads)
+            {mergeSortParallel(array, firstEl, midEl);}
+#pragma omp task// firstprivate(lastEl, midEl, freeThreads)
+            {mergeSortParallel(array, midEl, lastEl);}
+#pragma omp taskwait
+            merge(array, firstEl, midEl, lastEl);
+            
+        }
+    }
+}
+
+template<typename type>
+internal void
+mergeSortParallel(type *array, int32 size) {
+#pragma omp parallel
+#pragma omp single nowait
+    mergeSortParallel(array, 0, size);
+}
+
+
+// 0 1 2 3 4 5
+// ---
+//   ---
+//     ---
+
+// -- -- --
+//  --  -- --
+// -- -- --
+
+internal void
+bubbleSort(int * array, int size) {
+    for(int32 i = 0; i < size; i++)
+    {
+        int first = i % 2;
+        
+#pragma omp parallel for default(none) shared(array, first, size)
+        for(int32 j = first; j < size - 1; j += 2)
+        {
+            if (array[j] > array[j + 1])
+            {
+                std::swap(array[j], array[j + 1]);
+            }
+        }
+    }
+    
+}
+
+internal void
+bubbleSortSeq(int32* array, int32 size) {
+    for(int32 i = 0; i < size; i++)
+    {
+        bool stop = true;
+        for (int32 j = 0; j < size - 1; j++)
+        {
+            if (array[j] > array[j + 1])
+            {
+                std::swap(array[j], array[j + 1]);
+                stop = false;
+            }
+        }
+        if(stop)
+            break;
+    }
+    
+}
 
 
 template <typename F, typename A1>
@@ -160,7 +246,9 @@ init() {
     }
     assert(number_of_threads > 0);
     std::cout << "Number of threads: " << number_of_threads << std::endl;
+    omp_set_nested(1);
 }
+
 
 
 // ****************** MAIN ***************************
@@ -168,18 +256,22 @@ init() {
 int main(int argc, const char * argv[]) {
     init();
     
-    std::cout << "Generating random numbers...\n";
-    int32 array_to_sort[size_of_array];
+    std::cout << "Generating random "<< size_of_array << " numbers...\n";
+    int32 *array_to_sort = new int32[size_of_array];
     for (int i = 0; i < size_of_array; i++) {
         array_to_sort[i] = rand() % 100;
     }
-    int32 array_to_sort_parallel[size_of_array];
+    int32 *array_to_sort_parallel = new int32[size_of_array];
     std::copy(&array_to_sort[0], &array_to_sort[0] + size_of_array, &array_to_sort_parallel[0]);
+    
     
     make_computation_and_print_elapsed_time(array_to_sort, size_of_array, mergeSort<int32>);
     make_computation_and_print_elapsed_time(array_to_sort_parallel, size_of_array, mergeSortParallel<int32>);
-    
-    // print_array(array_to_sort, size_of_array);
+
+//    make_computation_and_print_elapsed_time(array_to_sort, size_of_array, bubbleSortSeq);
+//    make_computation_and_print_elapsed_time(array_to_sort_parallel, size_of_array, bubbleSort);
+
+    //print_array(array_to_sort_parallel, size_of_array);
     assert(check_if_sorted(array_to_sort, size_of_array));
     assert(check_if_sorted(array_to_sort_parallel, size_of_array));
     
