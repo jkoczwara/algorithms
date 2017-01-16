@@ -36,8 +36,9 @@ typedef double real64;
 
 typedef char u8;
 
-global_variable u8 input_name[] = "input.txt";
+global_variable u8 input_name[] = "input_3.txt";
 global_variable u8 output_name[] = "output.txt";
+global_variable u8 output_name_decoded[] = "output-decoded.txt";
 global_variable u8 output_name_code_table[] = "output-coding.txt";
 
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
@@ -247,18 +248,21 @@ int main(int argc, const char * argv[]) {
     encoded_file_contents outputContents = encode((int32)inputContents.fileSize, inputContents.contents);
     writeFileToDisk((int32)outputContents.encodedFile.fileSize, outputContents.encodedFile.contents, output_name);
     writeFileToDisk((int32)outputContents.codeTable.fileSize, outputContents.codeTable.contents, output_name_code_table);
-    
+
+    std::cout << "\nEncoder input: \n" << inputContents.contents << "\n";
+    std::cout << "\nEncoder output: \n" << outputContents.encodedFile.contents << "\n";
+    std::cout << "\nEncoder output codes: \n" << outputContents.codeTable.contents << "\n\n";
+
     file_contents encodedInput = readEntireFileToMemory(output_name);
     file_contents codeTableInput = readEntireFileToMemory(output_name_code_table);
     file_contents decodedInput = decode((int32) encodedInput.fileSize, encodedInput.contents, (int32) codeTableInput.fileSize, codeTableInput.contents);
     
-    std::cout << "\nEncoder input: \n" << inputContents.contents << "\n";
-    std::cout << "\nEncoder output: \n" << outputContents.encodedFile.contents << "\n";
-    std::cout << "\nEncoder output codes: \n" << outputContents.codeTable.contents << "\n\n";
     std::cout << "\nDecoder input: \n" << encodedInput.contents << "\n";
-    std::cout << "\nDecoder output: \n" << decodedInput.contents << "\n";
+    std::cout << "\nDecoder output: \n" << decodedInput.contents << "\n\n";
     
-    std::cout << "\nComprass ratio (input/output [bytes]): " << inputContents.fileSize * 8 << "/" << outputContents.encodedFile.fileSize << " = " << (double)inputContents.fileSize * 8 / (double)outputContents.encodedFile.fileSize<< "\n";
+    writeFileToDisk((int32)decodedInput.fileSize, decodedInput.contents, output_name_decoded);
+    
+//    std::cout << "\nComprass ratio (input/output [bytes]): " << inputContents.fileSize * 8 << "/" << outputContents.encodedFile.fileSize << " = " << (double)inputContents.fileSize * 8 / (double)outputContents.encodedFile.fileSize<< "\n";
     
     return 0;
 }
