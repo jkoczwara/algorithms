@@ -12,6 +12,8 @@
 #include <map>
 #include <queue>
 #include <vector>
+#include <sstream>
+#include <string>
 
 
 #define internal static
@@ -36,6 +38,7 @@ typedef char u8;
 
 global_variable u8 input_name[] = "input.txt";
 global_variable u8 output_name[] = "output.txt";
+global_variable u8 output_name_code_table[] = "output-coding.txt";
 
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
 
@@ -44,6 +47,11 @@ global_variable u8 output_name[] = "output.txt";
 struct file_contents {
     size_t fileSize;
     u8 *contents;
+};
+
+struct encoded_file_contents {
+    file_contents encodedFile;
+    file_contents codeTable;
 };
 
 internal file_contents
@@ -57,8 +65,8 @@ readEntireFileToMemory(u8 *fileName){
     result.fileSize = ftell(file);
     fseek(file, 0, SEEK_SET);
     
-    result.contents = (u8*) malloc(result.fileSize);
-
+    result.contents = (u8*) malloc(result.fileSize + 1);
+    
     fread(result.contents, 1, result.fileSize, file);
     result.contents[result.fileSize] = '\0';
     
@@ -71,9 +79,11 @@ internal void
 writeFileToDisk(int32 size, u8 *content, u8 *fileName) {
     FILE *outFile = fopen(fileName, "w");
     
-    if (outFile) {
-        fwrite(content, 1, size, outFile);
-    }
+    assert(outFile);
+    fwrite(content, 1, size, outFile);
+    
+    
+    fclose(outFile);
 }
 
 // ***************** ALGORITHM *****************
@@ -117,10 +127,12 @@ buildCodes(huffman_node *node, std::string prefix, std::map<u8, std::string> *co
     }
 }
 
-internal file_contents
+internal encoded_file_contents
 encode(int32 inSize, u8 *in){
+    // calculate frequencies of letters in input string
     std::map<u8, int32> freq = computeFrequenceOfLetters(inSize, in);
     
+    // make huffman table of nodes which contains frequency, letter and null references to subtrees
     std::priority_queue<huffman_node*, std::vector<huffman_node*>, queue_comparator> huffman_table;
     for (auto entry: freq) {
         huffman_node *node = new huffman_node;
@@ -151,50 +163,102 @@ encode(int32 inSize, u8 *in){
         huffman_table.emplace(newNode);
     }
     
+    // assign root of huffman tree to last element from huffman table
     huffman_node *root = huffman_table.top();
-
+    
+    // build coding table
     std::map<u8, std::string> *codes = new std::map<u8, std::string>;
     buildCodes(root, "", codes);
     
+    // make string out of encoded letters
     std::string outputString = "";
     while (inSize--) {
         outputString += (*codes)[*in++].c_str();
     }
+    file_contents retEncoded = {};
+    retEncoded.fileSize = outputString.size();
+    retEncoded.contents = (u8*)malloc(outputString.size() + 1);
+    strcpy(retEncoded.contents, outputString.c_str());
+    
+    // make string out of coding table
+    outputString = "";
+    for (auto& kv : *codes) {
+        outputString += kv.first;
+        outputString += "=";
+        outputString += kv.second;
+        outputString += ",";
+    }
+    file_contents retCoding = {};
+    retCoding.fileSize = outputString.size();
+    retCoding.contents = (u8*)malloc(outputString.size() + 1);
+    strcpy(retCoding.contents, outputString.c_str());
+    
+    // assign to return struct
+    encoded_file_contents ret {};
+    ret.encodedFile = retEncoded;
+    ret.codeTable = retCoding;
+    
+    return ret;
+}
 
-    file_contents ret = {};
-    ret.fileSize = outputString.size();
-    ret.contents = (u8*)malloc(outputString.size() + 1);
-    strcpy(ret.contents, outputString.c_str());
+internal std::map<std::string, u8>
+makeCodeTable(u8 *in){
+    std::map<std::string, u8> ret;
+    std::string tempString = std::string(in);
+    std::stringstream ss(tempString);
+    std::vector<std::string> vect;
+    
+    std::string token;
+    while (std::getline(ss, token, ',')) {
+        size_t pos   = token.find('=');
+        std::string letter = token.substr(0, pos);
+        std::string code   = token.substr(pos + 1);
+        ret[code] = letter.at(0);
+    }
     
     return ret;
 }
 
 internal file_contents
-decode(int32 inSize, u8 *in){
+decode(int32 inSize, u8 *in, int32 codeTableSize, u8 *codeTable){
+    std::map<std::string, u8> codes = makeCodeTable(codeTable);
+    std::string outputString = "";
     
-    return {};
+    // decode input string
+    std::string code = "";
+    for (int i = 0; i < inSize; ++i) {
+        code += in[i];
+        if ( codes.count(code)) {
+            // append character from code table to output string
+            outputString += codes.at(code);
+            code = "";
+        }
+    }
+    
+    file_contents retEncoded = {};
+    retEncoded.fileSize = outputString.size();
+    retEncoded.contents = (u8*)malloc(outputString.size() + 1);
+    strcpy(retEncoded.contents, outputString.c_str());
+    return retEncoded;
 }
-
-// TODO wrong buffer size (/xaa chars) in readEntireFileToMemory method - causes u8* to not terminate with \0
-// TODO saving code table to file
-// TODO decoding
-// TODO tests
-
 
 int main(int argc, const char * argv[]) {
     file_contents inputContents = readEntireFileToMemory(input_name);
-    file_contents outputContents = encode((int32)inputContents.fileSize, inputContents.contents);
-    writeFileToDisk((int32)outputContents.fileSize, outputContents.contents, output_name);
+    encoded_file_contents outputContents = encode((int32)inputContents.fileSize, inputContents.contents);
+    writeFileToDisk((int32)outputContents.encodedFile.fileSize, outputContents.encodedFile.contents, output_name);
+    writeFileToDisk((int32)outputContents.codeTable.fileSize, outputContents.codeTable.contents, output_name_code_table);
     
-//    file_contents encodedInput = readEntireFileToMemory(output_name);
-//    file_contents decodedInput = decode((int32) encodedInput.fileSize, encodedInput.contents);
+    file_contents encodedInput = readEntireFileToMemory(output_name);
+    file_contents codeTableInput = readEntireFileToMemory(output_name_code_table);
+    file_contents decodedInput = decode((int32) encodedInput.fileSize, encodedInput.contents, (int32) codeTableInput.fileSize, codeTableInput.contents);
     
-    std::cout << "Encoder input: \n" << inputContents.contents << "\n";
-    std::cout << "Encoder output: \n" << outputContents.contents << "\n\n\n";
-//    std::cout << "Decoder input: \n" << encodedInput.contents << "\n";
-//    std::cout << "Decoder output: \n" << decodedInput.contents << "\n";
+    std::cout << "\nEncoder input: \n" << inputContents.contents << "\n";
+    std::cout << "\nEncoder output: \n" << outputContents.encodedFile.contents << "\n";
+    std::cout << "\nEncoder output codes: \n" << outputContents.codeTable.contents << "\n\n";
+    std::cout << "\nDecoder input: \n" << encodedInput.contents << "\n";
+    std::cout << "\nDecoder output: \n" << decodedInput.contents << "\n";
     
-    std::cout << "Comprass ratio: " << inputContents.fileSize * 8 << "\\" << outputContents.fileSize << "\n";
+    std::cout << "\nComprass ratio (input/output [bytes]): " << inputContents.fileSize * 8 << "/" << outputContents.encodedFile.fileSize << " = " << (double)inputContents.fileSize * 8 / (double)outputContents.encodedFile.fileSize<< "\n";
     
     return 0;
 }
